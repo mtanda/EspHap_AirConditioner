@@ -106,10 +106,16 @@ void setup()
 
   WiFi.begin(ssid, password);
 
+  uint32_t retry_count = 0;
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
+    retry_count++;
+    if (retry_count > 10)
+    {
+      esp_restart();
+    }
   }
   Serial.println("");
   Serial.println("WiFi connected");
