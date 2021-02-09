@@ -5,6 +5,8 @@
 #include <FS.h>
 #include <SPIFFS.h>
 #include <PanasonicHeatpumpIR.h>
+#include <IRremoteESP8266.h>
+#include <IRsend.h>
 
 const char *ssid = "your ssid";
 const char *password = "pwd to ssid";
@@ -19,6 +21,8 @@ extern "C"
 homekit_service_t *thermostat_service = {0};
 homekit_service_t *temperature_service = {0};
 homekit_service_t *humidity_service = {0};
+homekit_service_t *relaydim_service = {0};
+IRsend irsend(ir_gpio);
 BLEScan *pBLEScan;
 String pair_file_name = "/pair.dat";
 
@@ -130,7 +134,10 @@ void setup()
   thermostat_service = hap_add_thermostat_service("Temperature", temperature_callback, NULL);
   temperature_service = hap_add_temp_as_accessory(homekit_accessory_category_thermostat, "Temperature");
   humidity_service = hap_add_hum_as_accessory(homekit_accessory_category_thermostat, "Humidity");
+  relaydim_service = hap_add_relaydim_service_as_accessory(homekit_accessory_category_lightbulb, "Light", relaydim_callback, NULL);
   hap_init_homekit_server();
+
+  irsend.begin();
 
   // setup BLE
   BLEDevice::init("");
@@ -227,4 +234,57 @@ void temperature_callback(homekit_characteristic_t *ch, homekit_value_t value, v
   }
   ch_current_state->value = HOMEKIT_UINT8_VALUE(state);
   homekit_characteristic_notify(ch_current_state, ch_current_state->value);
+}
+
+void relaydim_callback(homekit_characteristic_t *ch, homekit_value_t value, void *context)
+{
+  Serial.println("relaydim_callback");
+  if (!relaydim_service)
+  {
+    Serial.println("service not defined");
+    return;
+  }
+
+  homekit_characteristic_t *ch_on = homekit_service_characteristic_by_type(relaydim_service, HOMEKIT_CHARACTERISTIC_ON);
+  homekit_characteristic_t *ch_brightness = homekit_service_characteristic_by_type(relaydim_service, HOMEKIT_CHARACTERISTIC_BRIGHTNESS);
+  if (strcmp(ch->type, HOMEKIT_CHARACTERISTIC_ON) == 0)
+  {
+    Serial.printf("set relaydim state=%s\n", ch_on->value.bool_value ? "on" : "off");
+    if (ch_on->value.bool_value)
+    {
+      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
+      HAP_NOTIFY_CHANGES(int, ch_brightness, 100, 0);
+    }
+    else
+    {
+      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
+      HAP_NOTIFY_CHANGES(int, ch_brightness, 0, 0);
+    }
+    HAP_NOTIFY_CHANGES(bool, ch_on, ch_on->value.bool_value, 0);
+  }
+  else if (strcmp(ch->type, HOMEKIT_CHARACTERISTIC_BRIGHTNESS) == 0)
+  {
+    int brightness = ch_brightness->value.int_value;
+    Serial.printf("set relaydim brightness=%d\n", brightness);
+    switch (brightness)
+    {
+    case 100:
+      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
+      break;
+    case 0:
+      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
+      break;
+    default:
+      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
+      for (int i = 100; i > brightness; i -= 10)
+      {
+        Serial.println("decrease relaydim brightness");
+        irsend.sendNEC(irsend.encodeNEC(0xC580, 0x97));
+        HAP_NOTIFY_CHANGES(int, ch_brightness, brightness, 0);
+        delay(200);
+      }
+      break;
+    }
+    HAP_NOTIFY_CHANGES(int, ch_brightness, brightness, 0);
+  }
 }
