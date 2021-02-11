@@ -25,6 +25,8 @@ homekit_service_t *relaydim_service = {0};
 IRsend irsend(ir_gpio);
 BLEScan *pBLEScan;
 String pair_file_name = "/pair.dat";
+String current_relaydim_on = "unknown";
+int current_relaydim_brightness = -1;
 
 class BLEAdvertisedDevice_cb : public BLEAdvertisedDeviceCallbacks
 {
@@ -249,42 +251,66 @@ void relaydim_callback(homekit_characteristic_t *ch, homekit_value_t value, void
   homekit_characteristic_t *ch_brightness = homekit_service_characteristic_by_type(relaydim_service, HOMEKIT_CHARACTERISTIC_BRIGHTNESS);
   if (strcmp(ch->type, HOMEKIT_CHARACTERISTIC_ON) == 0)
   {
-    Serial.printf("set relaydim state=%s\n", ch_on->value.bool_value ? "on" : "off");
-    if (ch_on->value.bool_value)
+    String relaydim_on = ch_on->value.bool_value ? "on" : "off";
+    if (relaydim_on.compareTo(current_relaydim_on) != 0)
     {
-      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
-      HAP_NOTIFY_CHANGES(int, ch_brightness, 100, 0);
+      Serial.printf("set relaydim state=%s\n", relaydim_on);
+      if (ch_on->value.bool_value)
+      {
+        irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
+        current_relaydim_brightness = 100;
+      }
+      else
+      {
+        irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
+        current_relaydim_brightness = 0;
+      }
+      current_relaydim_on = relaydim_on;
+      HAP_NOTIFY_CHANGES(bool, ch_on, ch_on->value.bool_value, 0);
+      HAP_NOTIFY_CHANGES(int, ch_brightness, current_relaydim_brightness, 0);
     }
-    else
-    {
-      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
-      HAP_NOTIFY_CHANGES(int, ch_brightness, 0, 0);
-    }
-    HAP_NOTIFY_CHANGES(bool, ch_on, ch_on->value.bool_value, 0);
   }
   else if (strcmp(ch->type, HOMEKIT_CHARACTERISTIC_BRIGHTNESS) == 0)
   {
     int brightness = ch_brightness->value.int_value;
-    Serial.printf("set relaydim brightness=%d\n", brightness);
-    switch (brightness)
+    if ((brightness / 10) != (current_relaydim_brightness / 10))
     {
-    case 100:
-      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
-      break;
-    case 0:
-      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
-      break;
-    default:
-      irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
-      for (int i = 100; i > brightness; i -= 10)
+      Serial.printf("set relaydim brightness=%d, current brightness=%d\n", brightness, current_relaydim_brightness);
+      switch (brightness)
       {
-        Serial.println("decrease relaydim brightness");
-        irsend.sendNEC(irsend.encodeNEC(0xC580, 0x97));
-        HAP_NOTIFY_CHANGES(int, ch_brightness, brightness, 0);
-        delay(200);
+      case 100:
+        irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
+        current_relaydim_on = "on";
+        HAP_NOTIFY_CHANGES(bool, ch_on, true, 0);
+        break;
+      case 0:
+        irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
+        current_relaydim_on = "off";
+        HAP_NOTIFY_CHANGES(bool, ch_on, false, 0);
+        break;
+      default:
+        if (current_relaydim_brightness < brightness)
+        {
+          for (int i = (current_relaydim_brightness / 10); i < (brightness / 10); i += 1)
+          {
+            Serial.println("increase relaydim brightness");
+            irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9F));
+            delay(200);
+          }
+        }
+        else
+        {
+          for (int i = (current_relaydim_brightness / 10); i > (brightness / 10); i -= 1)
+          {
+            Serial.println("decrease relaydim brightness");
+            irsend.sendNEC(irsend.encodeNEC(0xC580, 0x97));
+            delay(200);
+          }
+        }
+        break;
       }
-      break;
+      current_relaydim_brightness = brightness;
+      HAP_NOTIFY_CHANGES(int, ch_brightness, current_relaydim_brightness, 0);
     }
-    HAP_NOTIFY_CHANGES(int, ch_brightness, brightness, 0);
   }
 }
