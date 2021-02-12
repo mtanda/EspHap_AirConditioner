@@ -152,12 +152,12 @@ void setup()
 
 void loop()
 {
-  delay(2000);
+  delay(5000);
 
   if (hap_homekit_is_paired())
   {
     Serial.println("BLE start scan");
-    pBLEScan->start(5, false);
+    pBLEScan->start(3, false);
     pBLEScan->clearResults();
   }
 }
