@@ -27,6 +27,7 @@ BLEScan *pBLEScan;
 String pair_file_name = "/pair.dat";
 String current_relaydim_on = "unknown";
 int current_relaydim_brightness = -1;
+int last_relaydim_brightness = -1;
 
 class BLEAdvertisedDevice_cb : public BLEAdvertisedDeviceCallbacks
 {
@@ -257,12 +258,21 @@ void relaydim_callback(homekit_characteristic_t *ch, homekit_value_t value, void
       Serial.printf("set relaydim state=%s\n", relaydim_on);
       if (ch_on->value.bool_value)
       {
-        irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
-        current_relaydim_brightness = 100;
+        if (last_relaydim_brightness == -1)
+        {
+          irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9B));
+          current_relaydim_brightness = 100;
+        }
+        else
+        {
+          irsend.sendNEC(irsend.encodeNEC(0xC580, 0x2F));
+          current_relaydim_brightness = last_relaydim_brightness;
+        }
       }
       else
       {
         irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
+        last_relaydim_brightness = current_relaydim_brightness;
         current_relaydim_brightness = 0;
       }
       current_relaydim_on = relaydim_on;
@@ -285,6 +295,7 @@ void relaydim_callback(homekit_characteristic_t *ch, homekit_value_t value, void
         break;
       case 0:
         irsend.sendNEC(irsend.encodeNEC(0xC580, 0x9));
+        last_relaydim_brightness = current_relaydim_brightness;
         current_relaydim_on = "off";
         HAP_NOTIFY_CHANGES(bool, ch_on, false, 0);
         break;
