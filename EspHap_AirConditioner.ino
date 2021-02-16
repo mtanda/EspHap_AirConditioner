@@ -236,6 +236,7 @@ void temperature_callback(homekit_characteristic_t *ch, homekit_value_t value, v
   }
   ch_current_state->value = HOMEKIT_UINT8_VALUE(state);
   homekit_characteristic_notify(ch_current_state, ch_current_state->value);
+  delay(200);
 }
 
 void relaydim_callback(homekit_characteristic_t *ch, homekit_value_t value, void *context)
@@ -268,6 +269,7 @@ void relaydim_callback(homekit_characteristic_t *ch, homekit_value_t value, void
       current_relaydim_on = relaydim_on;
       HAP_NOTIFY_CHANGES(bool, ch_on, ch_on->value.bool_value, 0);
       HAP_NOTIFY_CHANGES(int, ch_brightness, current_relaydim_brightness, 0);
+      delay(200);
     }
   }
   else if (strcmp(ch->type, HOMEKIT_CHARACTERISTIC_BRIGHTNESS) == 0)
@@ -311,6 +313,7 @@ void relaydim_callback(homekit_characteristic_t *ch, homekit_value_t value, void
       }
       current_relaydim_brightness = brightness;
       HAP_NOTIFY_CHANGES(int, ch_brightness, current_relaydim_brightness, 0);
+      delay(200);
     }
   }
 }
