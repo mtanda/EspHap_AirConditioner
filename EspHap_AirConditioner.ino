@@ -28,6 +28,8 @@ String pair_file_name = "/pair.dat";
 String current_relaydim_on = "unknown";
 int current_relaydim_brightness = -1;
 int last_relaydim_brightness = -1;
+unsigned long previousMillis = 0;
+const long interval = 5000;
 
 class BLEAdvertisedDevice_cb : public BLEAdvertisedDeviceCallbacks
 {
@@ -153,13 +155,17 @@ void setup()
 
 void loop()
 {
-  delay(5000);
-
-  if (hap_homekit_is_paired())
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval)
   {
-    Serial.println("BLE start scan");
-    pBLEScan->start(3, false);
-    pBLEScan->clearResults();
+    previousMillis = currentMillis;
+
+    if (hap_homekit_is_paired())
+    {
+      Serial.println("BLE start scan");
+      pBLEScan->start(3, false);
+      pBLEScan->clearResults();
+    }
   }
 }
 
